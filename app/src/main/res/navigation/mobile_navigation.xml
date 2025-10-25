@@ -25,7 +25,7 @@
     <fragment
         android:id="@+id/navigation_map"
         android:name="abdennourboukhris.grp2.findmyfriends.ui.map.MapFragment"
-        android:label="Friend Location"
+        android:label="@string/title_map"
         tools:layout="@layout/fragment_map">
 
         <argument
