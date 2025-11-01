@@ -4,7 +4,6 @@ import android.Manifest;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
-import android.app.TaskStackBuilder;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -25,27 +24,27 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.navigation.NavDeepLinkBuilder;
 
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.toolbox.StringRequest;
+import com.android.volley.toolbox.Volley;
 import com.google.android.gms.location.FusedLocationProviderClient;
 import com.google.android.gms.location.LocationCallback;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 
-import abdennourboukhris.grp2.findmyfriends.ui.GoogleMap.GoogleMaps;
-
+import java.util.HashMap;
+import java.util.Map;
 
 public class SmsReceiver extends BroadcastReceiver {
 
     private static final String TAG = "SmsReceiver";
     public static final String CHANNEL_ID = "FindMyFriendsChannel";
 
-    private static final String CHANNEL_NAME = "Position Notifications";
-    private static final int NOTIFICATION_ID = 1001;
-
-
     @Override
     public void onReceive(Context context, Intent intent) {
-        if (intent.getAction().equals("android.provider.Telephony.SMS_RECEIVED")) {
+        if ("android.provider.Telephony.SMS_RECEIVED".equals(intent.getAction())) {
             Bundle bundle = intent.getExtras();
             if (bundle != null) {
                 Object[] pdus = (Object[]) bundle.get("pdus");
@@ -56,70 +55,111 @@ public class SmsReceiver extends BroadcastReceiver {
 
                     if (messageBody.startsWith("findFriends: Send me your location")) {
                         Log.d(TAG, "Received location request from: " + senderNumber);
+                        //fetchAndSendLocationWithFused(context, senderNumber);
 
-                        fetchAndSendLocationWithFused(context, senderNumber);
+                        fetchAndSendLocationWithManager(context, senderNumber);
+
                     } else if (messageBody.startsWith("findFriends_location:")) {
                         Log.d(TAG, "Received location data from: " + senderNumber);
-                        //showLocationNotification(context, senderNumber, messageBody);
-                        showPositionNotificationGoogle(context, senderNumber, messageBody);
+                        saveAndShowNotification(context, senderNumber, messageBody);
                     }
                 }
             }
         }
     }
 
-    private void fetchAndSendLocation(Context context, String destinationNumber) {
+    /**
+     * The original method to get location using LocationManager.
+     * This is less efficient than FusedLocationProvider but works as requested.
+     */
+    private void fetchAndSendLocationWithManager(Context context, String destinationNumber) {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "Cannot get location, permission not granted.");
             return;
         }
+
         LocationManager locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
 
+        // Define a listener that will receive the location update
         LocationListener locationListener = new LocationListener() {
             @Override
             public void onLocationChanged(@NonNull Location location) {
-                // We have a location! Now we can send it.
-                double latitude = location.getLatitude();
-                double longitude = location.getLongitude();
-                String locationMessage = "findFriends_location:" + latitude + "," + longitude;
-
-                try {
-                    SmsManager smsManager = SmsManager.getDefault();
-                    smsManager.sendTextMessage(destinationNumber, null, locationMessage, null, null);
-                    Log.d(TAG, "Sent location back to " + destinationNumber);
-                } catch (Exception e) {
-                    Log.e(TAG, "Failed to send location SMS", e);
-                }
-
+                // We got a location, now send it
+                sendLocationSms(destinationNumber, location.getLatitude(), location.getLongitude());
+                // IMPORTANT: Stop listening for updates to save battery
                 locationManager.removeUpdates(this);
             }
 
             @Override
             public void onProviderDisabled(@NonNull String provider) {
+                // If the provider is disabled, we should also stop listening
                 locationManager.removeUpdates(this);
             }
         };
 
+        // Request a single, fresh location update from the GPS provider
         locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
     }
 
-    private void showLocationNotification(Context context, String sender, String message) {
-        createNotificationChannel(context);
+    private void fetchAndSendLocationWithFused(Context context, String destinationNumber) {
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "Cannot get location, permission not granted.");
+            return;
+        }
 
-        Bundle args = new Bundle();
+        FusedLocationProviderClient mClient = LocationServices.getFusedLocationProviderClient(context);
+
+        mClient.getLastLocation().addOnSuccessListener(location -> {
+            if (location != null) {
+                sendLocationSms(destinationNumber, location.getLatitude(), location.getLongitude());
+            } else {
+                Log.e(TAG, "Location is null, requesting fresh update...");
+                LocationRequest locationRequest = LocationRequest.create()
+                        .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
+                        .setNumUpdates(1);
+
+                mClient.requestLocationUpdates(locationRequest, new LocationCallback() {
+                    @Override
+                    public void onLocationResult(@NonNull LocationResult locationResult) {
+                        Location freshLocation = locationResult.getLastLocation();
+                        if (freshLocation != null) {
+                            sendLocationSms(destinationNumber, freshLocation.getLatitude(), freshLocation.getLongitude());
+                        }
+                    }
+                }, Looper.getMainLooper());
+            }
+        });
+    }
+
+    private void sendLocationSms(String destination, double lat, double lon) {
+        String locationMessage = "findFriends_location:" + lat + "," + lon;
+        try {
+            SmsManager.getDefault().sendTextMessage(destination, null, locationMessage, null, null);
+            Log.d(TAG, "Sent location back to " + destination);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to send location SMS", e);
+        }
+    }
+
+    private void saveAndShowNotification(Context context, String sender, String message) {
+        createNotificationChannel(context);
+        float latitude;
+        float longitude;
         try {
             String coords = message.split(":")[1];
             String[] latLng = coords.split(",");
-
-            args.putFloat("latitude", Float.parseFloat(latLng[0]));
-            args.putFloat("longitude", Float.parseFloat(latLng[1]));
-            args.putString("sender", sender);
-
+            latitude = Float.parseFloat(latLng[0]);
+            longitude = Float.parseFloat(latLng[1]);
         } catch (Exception e) {
             Log.e(TAG, "Could not parse location from SMS", e);
             return;
         }
 
+        saveLocationToDatabase(context, String.valueOf(latitude), String.valueOf(longitude), sender);
+
+        Bundle args = new Bundle();
+        args.putFloat("focus_latitude", latitude);
+        args.putFloat("focus_longitude", longitude);
 
         PendingIntent pendingIntent = new NavDeepLinkBuilder(context)
                 .setComponentName(MainActivity.class)
@@ -129,20 +169,38 @@ public class SmsReceiver extends BroadcastReceiver {
                 .createPendingIntent();
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(R.drawable.ic_dashboard_black_24dp)
-                .setContentTitle("Location Received")
-                .setContentText("You can now view " + sender + "'s location")
+                .setSmallIcon(org.osmdroid.library.R.drawable.ic_menu_compass)
+                .setContentTitle("New Location Saved")
+                .setContentText("Location from " + sender + " has been added.")
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true);
 
-        // 6. Actually show it
         NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-            notificationManager.notify(1, builder.build());
+            notificationManager.notify((int) System.currentTimeMillis(), builder.build());
         }
     }
 
+    private void saveLocationToDatabase(Context context, String latitude, String longitude, String numero) {
+        RequestQueue queue = Volley.newRequestQueue(context);
+        StringRequest stringRequest = new StringRequest(Request.Method.POST, Config.URL_POST_Location,
+                response -> Log.d(TAG, "Successfully saved location: " + response),
+                error -> Log.e(TAG, "Failed to save location: " + error.toString())
+        ) {
+            @NonNull
+            @Override
+            protected Map<String, String> getParams() {
+                Map<String, String> params = new HashMap<>();
+                params.put("latitude", latitude);
+                params.put("longitude", longitude);
+                params.put("numero", numero);
+                params.put("pseudo", numero);
+                return params;
+            }
+        };
+        queue.add(stringRequest);
+    }
 
     private void createNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -156,99 +214,4 @@ public class SmsReceiver extends BroadcastReceiver {
             notificationManager.createNotificationChannel(channel);
         }
     }
-
-    private void fetchAndSendLocationWithFused(Context context, String destinationNumber) {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            Log.e(TAG, "Cannot get location, permission not granted.");
-            return;
-        }
-
-        FusedLocationProviderClient mClient = LocationServices.getFusedLocationProviderClient(context);
-
-        mClient.getLastLocation().addOnSuccessListener(location -> {
-            if (location != null) {
-                double latitude = location.getLatitude();
-                double longitude = location.getLongitude();
-                String locationMessage = "findFriends_location:" + latitude + "," + longitude;
-
-                try {
-                    SmsManager smsManager = SmsManager.getDefault();
-                    smsManager.sendTextMessage(destinationNumber, null, locationMessage, null, null);
-                    Log.d(TAG, "Sent location back to " + destinationNumber);
-                } catch (Exception e) {
-                    Log.e(TAG, "Failed to send location SMS", e);
-                }
-
-            } else {
-                Log.e(TAG, "Location is null, requesting fresh update...");
-
-                LocationRequest locationRequest = LocationRequest.create()
-                        .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
-                        .setInterval(2000)
-                        .setFastestInterval(1000)
-                        .setNumUpdates(1);
-
-                mClient.requestLocationUpdates(locationRequest, new LocationCallback() {
-                    @Override
-                    public void onLocationResult(LocationResult locationResult) {
-                        if (locationResult != null) {
-                            Location freshLocation = locationResult.getLastLocation();
-                            double latitude = freshLocation.getLatitude();
-                            double longitude = freshLocation.getLongitude();
-                            String locationMessage = "findFriends_location:" + latitude + "," + longitude;
-
-                            try {
-                                SmsManager smsManager = SmsManager.getDefault();
-                                smsManager.sendTextMessage(destinationNumber, null, locationMessage, null, null);
-                                Log.d(TAG, "Sent fresh location back to " + destinationNumber);
-                            } catch (Exception e) {
-                                Log.e(TAG, "Failed to send fresh location SMS", e);
-                            }
-
-                            mClient.removeLocationUpdates(this);
-                        }
-                    }
-                }, Looper.getMainLooper());
-            }
-        });
-    }
-
-    public void showPositionNotificationGoogle(Context context, String sender, String message) {
-
-        createNotificationChannel(context);
-
-        String coords = message.split(":")[1];
-        String[] latLng = coords.split(",");
-
-
-        Intent mapIntent = new Intent(context, GoogleMaps.class);
-
-        mapIntent.putExtra("latitude", Double.parseDouble(latLng[0]));
-        mapIntent.putExtra("longitude", Double.parseDouble(latLng[1]));
-        mapIntent.putExtra("sender", sender);
-        mapIntent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
-
-        PendingIntent pendingIntent = PendingIntent.getActivity(
-                context,
-                0,
-                mapIntent,
-                PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE
-        );
-
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.ic_dialog_map)
-                .setContentTitle("Location Received")
-                .setContentText("You can now view " + sender + "'s location")
-                .setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setAutoCancel(true)
-                .setContentIntent(pendingIntent);
-
-        // Afficher la notification
-        NotificationManager notificationManager = (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
-        if (notificationManager != null) {
-            notificationManager.notify(NOTIFICATION_ID, builder.build());
-        }
-    }
-
-
 }

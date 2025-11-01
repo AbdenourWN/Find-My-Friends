@@ -51,4 +51,6 @@ dependencies {
     androidTestImplementation(libs.espresso.core)
     implementation("org.osmdroid:osmdroid-android:6.1.16")
     implementation("androidx.preference:preference-ktx:1.2.0")
+    implementation("com.android.volley:volley:1.2.1")
+
 }

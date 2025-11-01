@@ -1,94 +1,134 @@
 package abdennourboukhris.grp2.findmyfriends.ui.map;
 
-import android.content.Context;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.fragment.app.Fragment;
-import androidx.preference.PreferenceManager;
 
-import org.osmdroid.config.Configuration;
-import org.osmdroid.tileprovider.tilesource.TileSourceFactory;
-import org.osmdroid.util.GeoPoint;
-import org.osmdroid.views.MapView;
-import org.osmdroid.views.overlay.Marker;
+import com.android.volley.Request;
+import com.android.volley.RequestQueue;
+import com.android.volley.toolbox.JsonObjectRequest;
+import com.android.volley.toolbox.Volley;
+import com.google.android.gms.maps.CameraUpdateFactory;
+import com.google.android.gms.maps.GoogleMap;
+import com.google.android.gms.maps.OnMapReadyCallback;
+import com.google.android.gms.maps.SupportMapFragment;
+import com.google.android.gms.maps.model.LatLng;
+import com.google.android.gms.maps.model.LatLngBounds;
+import com.google.android.gms.maps.model.MarkerOptions;
 
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import abdennourboukhris.grp2.findmyfriends.Config;
+import abdennourboukhris.grp2.findmyfriends.Position;
 import abdennourboukhris.grp2.findmyfriends.R;
-import abdennourboukhris.grp2.findmyfriends.databinding.FragmentMapBinding;
 
-public class MapFragment extends Fragment {
+public class MapFragment extends Fragment implements OnMapReadyCallback {
 
-    private MapView map = null;
-    private FragmentMapBinding binding;
+    private GoogleMap mMap;
+    private RequestQueue requestQueue;
+    private Bundle arguments;
 
+    @Nullable
     @Override
     public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container, @Nullable Bundle savedInstanceState) {
-        // Inflate the layout for this fragment using View Binding
-        binding = FragmentMapBinding.inflate(inflater, container, false);
-        return binding.getRoot();
+        this.arguments = getArguments();
+        return inflater.inflate(R.layout.fragment_map, container, false);
     }
 
     @Override
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
+        // It's safer to initialize the queue here, tied to the fragment's lifecycle
+        requestQueue = Volley.newRequestQueue(requireContext());
 
-        // --- osmdroid Configuration ---
-        Context ctx = requireContext().getApplicationContext();
-        Configuration.getInstance().load(ctx, PreferenceManager.getDefaultSharedPreferences(ctx));
-        Configuration.getInstance().setUserAgentValue(requireActivity().getPackageName());
-
-        // --- Get the MapView from the Binding ---
-        map = binding.mapView;
-        map.setTileSource(TileSourceFactory.MAPNIK);
-        map.setMultiTouchControls(true);
-
-        // --- Get Arguments Passed from Navigation ---
-        float latitude = 0.0f;
-        float longitude = 0.0f;
-        String sender = "Unknown";
-        if (getArguments() != null) {
-            latitude = getArguments().getFloat("latitude");
-            longitude = getArguments().getFloat("longitude");
-            sender = getArguments().getString("sender");
-        }
-
-        // --- Center Map and Add Marker ---
-        GeoPoint friendLocation = new GeoPoint(latitude, longitude);
-        map.getController().setZoom(18.0);
-        map.getController().setCenter(friendLocation);
-
-        Marker locationMarker = new Marker(map);
-        locationMarker.setPosition(friendLocation);
-        locationMarker.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_BOTTOM);
-        locationMarker.setTitle("Friend's Location");
-        locationMarker.setSnippet("Received from: " + sender);
-        map.getOverlays().add(locationMarker);
-    }
-
-    @Override
-    public void onResume() {
-        super.onResume();
-        if (map != null) {
-            map.onResume();
+        SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map_container);
+        if (mapFragment != null) {
+            mapFragment.getMapAsync(this);
         }
     }
 
     @Override
-    public void onPause() {
-        super.onPause();
-        if (map != null) {
-            map.onPause();
-        }
+    public void onMapReady(@NonNull GoogleMap googleMap) {
+        mMap = googleMap;
+        fetchAllLocations();
     }
 
-    @Override
-    public void onDestroyView() {
-        super.onDestroyView();
-        // Clean up the binding reference
-        binding = null;
+    private void fetchAllLocations() {
+        if (mMap == null) return;
+
+        JsonObjectRequest jsonObjectRequest = new JsonObjectRequest(
+                Request.Method.GET, Config.URL_GetAll_Location, null,
+                response -> {
+                    List<Position> positionList = new ArrayList<>();
+                    try {
+                        if (response.getInt("success") == 1) {
+                            JSONArray positionsArray = response.getJSONArray("positions");
+                            for (int i = 0; i < positionsArray.length(); i++) {
+                                JSONObject posObject = positionsArray.getJSONObject(i);
+                                positionList.add(new Position(
+                                        posObject.getDouble("latitude"),
+                                        posObject.getDouble("longitude"),
+                                        // --- THIS IS THE CRITICAL FIX ---
+                                        // Read the phone number as a String to prevent the crash
+                                        posObject.getString("numero"),
+                                        posObject.getString("pseudo")
+                                ));
+                            }
+                            displayAllMarkersAndFocus(positionList);
+                        } else {
+                            Log.e("MapFragment", "Server responded with success=0");
+                            Toast.makeText(getContext(), "Server error: Could not fetch locations.", Toast.LENGTH_SHORT).show();
+                        }
+                    } catch (JSONException e) {
+                        Log.e("MapFragment", "JSON Parsing error: " + e.getMessage());
+                        Toast.makeText(getContext(), "Error parsing server data", Toast.LENGTH_SHORT).show();
+                    }
+                },
+                error -> {
+                    Log.e("MapFragment", "Volley error: " + error.toString());
+                    Toast.makeText(getContext(), "Could not connect to server", Toast.LENGTH_SHORT).show();
+                }
+        );
+        requestQueue.add(jsonObjectRequest);
+    }
+
+    private void displayAllMarkersAndFocus(List<Position> positionList) {
+        if (mMap == null) return; // Add a safety check
+        mMap.clear();
+
+        if (positionList.isEmpty()) {
+            Toast.makeText(getContext(), "No saved locations found.", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        LatLngBounds.Builder boundsBuilder = new LatLngBounds.Builder();
+        for (Position pos : positionList) {
+            LatLng latLng = new LatLng(pos.getLatitude(), pos.getLongitude());
+            mMap.addMarker(new MarkerOptions().position(latLng).title(pos.getPseudo()).snippet("Tel: " + pos.getNumero()));
+            boundsBuilder.include(latLng);
+        }
+
+        if (arguments != null && arguments.containsKey("focus_latitude")) {
+            float lat = arguments.getFloat("focus_latitude");
+            float lon = arguments.getFloat("focus_longitude");
+            LatLng focusPoint = new LatLng(lat, lon);
+            mMap.animateCamera(CameraUpdateFactory.newLatLngZoom(focusPoint, 15f), 1500, null);
+            arguments = null; // Important: Consume the arguments
+        } else {
+            LatLngBounds bounds = boundsBuilder.build();
+            mMap.animateCamera(CameraUpdateFactory.newLatLngBounds(bounds, 100));
+        }
     }
 }
