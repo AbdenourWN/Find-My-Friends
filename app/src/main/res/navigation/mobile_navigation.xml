@@ -42,4 +42,9 @@
             app:argType="string" />
 
     </fragment>
+    <fragment
+        android:id="@+id/navigation_friends"
+        android:name="abdennourboukhris.grp2.findmyfriends.ui.friends.FriendsFragment"
+        android:label="Friends"
+        tools:layout="@layout/fragment_friends" />
 </navigation>

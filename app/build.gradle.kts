@@ -46,11 +46,15 @@ dependencies {
     implementation(libs.navigation.ui)
     implementation(libs.play.services.location)
     implementation(libs.play.services.maps)
+    implementation(libs.legacy.support.v4)
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
     implementation("org.osmdroid:osmdroid-android:6.1.16")
     implementation("androidx.preference:preference-ktx:1.2.0")
     implementation("com.android.volley:volley:1.2.1")
+    implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("com.google.android.material:material:1.12.0")
+
 
 }

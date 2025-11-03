@@ -13,4 +13,26 @@
         <item name="android:statusBarColor">?attr/colorPrimaryVariant</item>
         <!-- Customize your theme here. -->
     </style>
+
+    <style name="MyRoundedDialogTheme" parent="Theme.MaterialComponents.DayNight.Dialog.Alert">
+        <!-- Use our custom drawable for the dialog's background -->
+        <item name="android:windowBackground">@drawable/dialog_background</item>
+
+        <!-- Optional: You can also customize button styles -->
+        <item name="buttonBarPositiveButtonStyle">@style/MyDialogButton</item>
+        <item name="buttonBarNegativeButtonStyle">@style/MyDialogButton</item>
+    </style>
+
+    <!-- Optional: A style for the dialog buttons -->
+    <style name="MyDialogButton" parent="Widget.MaterialComponents.Button.TextButton.Dialog">
+        <item name="android:textColor">?attr/colorPrimary</item>
+    </style>
+    <style name="Theme.App.Starting" parent="Theme.SplashScreen">
+        <!-- Set the splash screen background, animated icon, and destination theme. -->
+        <item name="windowSplashScreenBackground">#121212</item>
+        <!-- Use your app's launcher icon -->
+        <item name="windowSplashScreenAnimatedIcon">@mipmap/me_location_round</item>
+        <!-- Set the theme of the Activity that follows your splash screen. -->
+        <item name="postSplashScreenTheme">@style/Theme.FindMyFriends</item>
+    </style>
 </resources>

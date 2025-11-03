@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+
+    <!--
+        Use a theme attribute for the color.
+        This makes the dialog automatically adapt to Day/Night mode.
+        ?attr/colorSurface is the standard background color for components like dialogs.
+    -->
+    <solid android:color="?attr/colorSurface" />
+
+    <!-- This is the key part for rounded corners. Adjust the dp value to your liking. -->
+    <corners android:radius="24dp" />
+
+</shape>

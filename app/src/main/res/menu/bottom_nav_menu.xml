@@ -19,5 +19,9 @@
         android:id="@+id/navigation_map"
         android:icon="@drawable/ic_menu_compass"
         android:title="@string/title_map" />
+    <item
+        android:id="@+id/navigation_friends"
+        android:icon="@drawable/ic_friends_icon"
+        android:title="Friends" />
 
 </menu>
