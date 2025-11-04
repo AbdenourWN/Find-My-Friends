@@ -1,51 +1,71 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<RelativeLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:padding="16dp"
-    android:background="?android:attr/selectableItemBackground">
+    android:background="?android:attr/selectableItemBackground"
+    android:padding="16dp">
 
-    <TextView
-        android:id="@+id/tv_friend_pseudo"
+    <LinearLayout
+        android:id="@+id/friend_info_layout"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="Friend's Name"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:textColor="?android:attr/textColorPrimary"/>
+        android:orientation="vertical"
+        android:layout_alignParentStart="true"
+        android:layout_centerVertical="true"
+        android:layout_toStartOf="@id/btn_request_location">
 
-    <TextView
-        android:id="@+id/tv_friend_numero"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:text="+1234567890"
-        android:textSize="14sp"
-        android:textColor="?android:attr/textColorSecondary"/>
+        <TextView
+            android:id="@+id/tv_friend_pseudo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Friend's Name"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="?android:attr/textColorPrimary"/>
+
+        <TextView
+            android:id="@+id/tv_friend_numero"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="+1234567890"
+            android:textSize="14sp"
+            android:textColor="?android:attr/textColorSecondary"/>
+    </LinearLayout>
 
     <LinearLayout
         android:id="@+id/layout_request_buttons"
-        android:layout_width="match_parent"
+        android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:orientation="horizontal"
-        android:layout_marginTop="12dp"
+        android:layout_alignParentEnd="true"
+        android:layout_centerVertical="true"
         android:visibility="gone">
 
         <Button
             android:id="@+id/btn_accept"
-            android:layout_width="0dp"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
             android:text="Accept"
             android:layout_marginEnd="8dp"/>
 
         <Button
             android:id="@+id/btn_decline"
-            android:layout_width="0dp"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="Decline"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"/>
+            android:text="Decline"/>
     </LinearLayout>
 
-</LinearLayout>
+    <!-- ADD THIS NEW BUTTON -->
+    <ImageButton
+        android:id="@+id/btn_request_location"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:src="@drawable/ic_menu_mylocation"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:contentDescription="Request Location"
+        android:layout_alignParentEnd="true"
+        android:layout_centerVertical="true"
+        android:visibility="gone"/>
+
+</RelativeLayout>

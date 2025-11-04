@@ -33,7 +33,7 @@ import abdennourboukhris.grp2.findmyfriends.Config;
 import abdennourboukhris.grp2.findmyfriends.R;
 import abdennourboukhris.grp2.findmyfriends.SessionManager;
 
-public class RequestsFragment extends Fragment implements FriendsAdapter.OnRequestInteractionListener {
+public class RequestsFragment extends Fragment implements FriendsAdapter.OnFriendInteractionListener {
 
     private static final String TAG = "RequestsFragment";
 
@@ -125,6 +125,11 @@ public class RequestsFragment extends Fragment implements FriendsAdapter.OnReque
     @Override
     public void onDecline(Friend friend) {
         updateRequestStatus(friend, "delete");
+    }
+
+    @Override
+    public void onRequestLocation(Friend friend) {
+
     }
 
     private void updateRequestStatus(Friend friend, String newStatusOrAction) {

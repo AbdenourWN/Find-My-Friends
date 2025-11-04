@@ -4,6 +4,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 import androidx.annotation.NonNull;
@@ -20,23 +21,16 @@ public class FriendsAdapter extends RecyclerView.Adapter<FriendsAdapter.FriendVi
 
     private final List<Friend> friendList;
     private final AdapterType adapterType;
-    private final OnRequestInteractionListener listener;
+    private final OnFriendInteractionListener listener;
 
-    // Interface for handling button clicks in the RequestsFragment
-    public interface OnRequestInteractionListener {
+    // A single, more flexible interface
+    public interface OnFriendInteractionListener {
         void onAccept(Friend friend);
         void onDecline(Friend friend);
+        void onRequestLocation(Friend friend);
     }
 
-    // Constructor for the Friends List (doesn't need a listener)
-    public FriendsAdapter(List<Friend> friendList, AdapterType type) {
-        this.friendList = friendList;
-        this.adapterType = type;
-        this.listener = null;
-    }
-
-    // Constructor for the Requests List (requires a listener)
-    public FriendsAdapter(List<Friend> friendList, AdapterType type, OnRequestInteractionListener listener) {
+    public FriendsAdapter(List<Friend> friendList, AdapterType type, OnFriendInteractionListener listener) {
         this.friendList = friendList;
         this.adapterType = type;
         this.listener = listener;
@@ -55,13 +49,16 @@ public class FriendsAdapter extends RecyclerView.Adapter<FriendsAdapter.FriendVi
         holder.tvPseudo.setText(friend.getPseudo());
         holder.tvNumero.setText(friend.getNumero());
 
-        // This is the core logic: show buttons only for the REQUESTS_LIST
-        if (adapterType == AdapterType.REQUESTS_LIST && listener != null) {
+        // This is the new logic to show the correct buttons based on adapter type
+        if (adapterType == AdapterType.REQUESTS_LIST) {
             holder.requestButtons.setVisibility(View.VISIBLE);
+            holder.btnRequestLocation.setVisibility(View.GONE);
             holder.btnAccept.setOnClickListener(v -> listener.onAccept(friend));
             holder.btnDecline.setOnClickListener(v -> listener.onDecline(friend));
-        } else {
+        } else { // FRIENDS_LIST
             holder.requestButtons.setVisibility(View.GONE);
+            holder.btnRequestLocation.setVisibility(View.VISIBLE);
+            holder.btnRequestLocation.setOnClickListener(v -> listener.onRequestLocation(friend));
         }
     }
 
@@ -74,6 +71,7 @@ public class FriendsAdapter extends RecyclerView.Adapter<FriendsAdapter.FriendVi
         TextView tvPseudo, tvNumero;
         LinearLayout requestButtons;
         Button btnAccept, btnDecline;
+        ImageButton btnRequestLocation;
 
         public FriendViewHolder(@NonNull View itemView) {
             super(itemView);
@@ -82,6 +80,7 @@ public class FriendsAdapter extends RecyclerView.Adapter<FriendsAdapter.FriendVi
             requestButtons = itemView.findViewById(R.id.layout_request_buttons);
             btnAccept = itemView.findViewById(R.id.btn_accept);
             btnDecline = itemView.findViewById(R.id.btn_decline);
+            btnRequestLocation = itemView.findViewById(R.id.btn_request_location);
         }
     }
 }

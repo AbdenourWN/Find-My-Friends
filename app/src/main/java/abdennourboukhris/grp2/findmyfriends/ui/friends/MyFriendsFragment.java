@@ -1,6 +1,7 @@
 package abdennourboukhris.grp2.findmyfriends.ui.friends;
 
 import android.os.Bundle;
+import android.telephony.SmsManager;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -33,7 +34,7 @@ import abdennourboukhris.grp2.findmyfriends.Config;
 import abdennourboukhris.grp2.findmyfriends.R;
 import abdennourboukhris.grp2.findmyfriends.SessionManager;
 
-public class MyFriendsFragment extends Fragment {
+public class MyFriendsFragment extends Fragment implements FriendsAdapter.OnFriendInteractionListener{
 
     private static final String TAG = "MyFriendsFragment";
 
@@ -61,7 +62,7 @@ public class MyFriendsFragment extends Fragment {
 
         // Setup RecyclerView
         recyclerView.setLayoutManager(new LinearLayoutManager(getContext()));
-        adapter = new FriendsAdapter(friendsList, FriendsAdapter.AdapterType.FRIENDS_LIST);
+        adapter = new FriendsAdapter(friendsList, FriendsAdapter.AdapterType.FRIENDS_LIST, this);
         recyclerView.setAdapter(adapter);
 
         return view;
@@ -121,6 +122,15 @@ public class MyFriendsFragment extends Fragment {
         };
         requestQueue.add(stringRequest);
     }
+    @Override
+    public void onAccept(Friend friend) {
+        // Not used in this fragment, can be left empty
+    }
+
+    @Override
+    public void onDecline(Friend friend) {
+        // Not used in this fragment, can be left empty
+    }
 
     private void setLoading(boolean isLoading) {
         progressBar.setVisibility(isLoading ? View.VISIBLE : View.GONE);
@@ -132,5 +142,21 @@ public class MyFriendsFragment extends Fragment {
 
     private void checkIfEmpty() {
         tvEmpty.setVisibility(friendsList.isEmpty() ? View.VISIBLE : View.GONE);
+    }
+
+    @Override
+    public void onRequestLocation(Friend friend) {
+        try {
+            SmsManager smsManager = SmsManager.getDefault();
+            String destinationNumber = friend.getNumero();
+            String message = "findFriends: Send me your location";
+
+            smsManager.sendTextMessage(destinationNumber, null, message, null, null);
+            //smsManager.sendTextMessage("+15551234567", null, message, null, null);
+            Toast.makeText(getContext(), "Location request sent to " + friend.getPseudo(), Toast.LENGTH_SHORT).show();
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to send location request SMS", e);
+            Toast.makeText(getContext(), "Could not send SMS. Please check permissions.", Toast.LENGTH_SHORT).show();
+        }
     }
 }

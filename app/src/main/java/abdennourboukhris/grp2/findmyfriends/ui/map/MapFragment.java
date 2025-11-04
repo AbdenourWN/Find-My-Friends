@@ -8,6 +8,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.ImageButton;
 import android.widget.ProgressBar;
 import android.widget.RadioGroup;
 import android.widget.TextView;
@@ -66,6 +67,8 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
     private String recencyFilter = "recent";
     private Calendar startDate = null;
     private Calendar endDate = null;
+    private ImageButton btnZoomIn;
+    private ImageButton btnZoomOut;
 
     private Bundle arguments;
 
@@ -86,11 +89,27 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
         progressBar = view.findViewById(R.id.progress_bar_map);
         fabFilter = view.findViewById(R.id.fab_filter);
         fabFilter.setOnClickListener(v -> showFilterDialog());
+        btnZoomIn = view.findViewById(R.id.btn_zoom_in);
+        btnZoomOut = view.findViewById(R.id.btn_zoom_out);
+
+        btnZoomIn.setOnClickListener(v -> {
+            if (mMap != null) {
+                mMap.animateCamera(CameraUpdateFactory.zoomIn());
+            }
+        });
+
+        btnZoomOut.setOnClickListener(v -> {
+            if (mMap != null) {
+                mMap.animateCamera(CameraUpdateFactory.zoomOut());
+            }
+        });
 
         SupportMapFragment mapFragment = (SupportMapFragment) getChildFragmentManager().findFragmentById(R.id.map_container);
         if (mapFragment != null) {
             mapFragment.getMapAsync(this);
         }
+
+
 
         // Only fetch friends for filtering if we are not viewing a specific trip
         if (arguments == null || !arguments.containsKey("trip_id_to_view")) {
@@ -102,6 +121,8 @@ public class MapFragment extends Fragment implements OnMapReadyCallback {
     public void onMapReady(@NonNull GoogleMap googleMap) {
         mMap = googleMap;
 
+        mMap.getUiSettings().setZoomControlsEnabled(false);
+        mMap.getUiSettings().setCompassEnabled(true);
         // --- NEW ROUTING LOGIC ---
         if (arguments != null && arguments.containsKey("trip_id_to_view")) {
             // A trip was selected, so we are in "Trip View" mode.

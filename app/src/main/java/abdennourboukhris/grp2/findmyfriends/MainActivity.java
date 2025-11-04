@@ -54,8 +54,8 @@ public class MainActivity extends AppCompatActivity {
         topLevelDestinations.add(R.id.navigation_friends);
         topLevelDestinations.add(R.id.navigation_map);
         topLevelDestinations.add(R.id.navigation_profile);
-        topLevelDestinations.add(R.id.navigation_notifications);
-        topLevelDestinations.add(R.id.navigation_dashboard);
+//        topLevelDestinations.add(R.id.navigation_notifications);
+//        topLevelDestinations.add(R.id.navigation_dashboard);
 
 
         AppBarConfiguration appBarConfiguration = new AppBarConfiguration.Builder(topLevelDestinations).build();

@@ -1,6 +1,7 @@
 package abdennourboukhris.grp2.findmyfriends;
 
 import android.Manifest;
+import android.annotation.SuppressLint;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -13,9 +14,8 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.Looper;
-import android.telephony.SmsManager;
 import android.telephony.SmsMessage;
+import android.telephony.TelephonyManager;
 import android.util.Log;
 
 import androidx.annotation.NonNull;
@@ -28,11 +28,9 @@ import com.android.volley.Request;
 import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.StringRequest;
 import com.android.volley.toolbox.Volley;
-import com.google.android.gms.location.FusedLocationProviderClient;
-import com.google.android.gms.location.LocationCallback;
-import com.google.android.gms.location.LocationRequest;
-import com.google.android.gms.location.LocationResult;
-import com.google.android.gms.location.LocationServices;
+
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -41,108 +39,144 @@ public class SmsReceiver extends BroadcastReceiver {
 
     private static final String TAG = "SmsReceiver";
     public static final String CHANNEL_ID = "FindMyFriendsChannel";
+    private RequestQueue requestQueue;
+
+    private interface UserFoundCallback {
+        void onUserFound(int userId);
+    }
 
     @Override
     public void onReceive(Context context, Intent intent) {
-        if ("android.provider.Telephony.SMS_RECEIVED".equals(intent.getAction())) {
-            Bundle bundle = intent.getExtras();
-            if (bundle != null) {
-                Object[] pdus = (Object[]) bundle.get("pdus");
-                for (Object pdu : pdus) {
-                    SmsMessage smsMessage = SmsMessage.createFromPdu((byte[]) pdu);
-                    String senderNumber = smsMessage.getDisplayOriginatingAddress();
-                    String messageBody = smsMessage.getMessageBody();
+        if (!"android.provider.Telephony.SMS_RECEIVED".equals(intent.getAction())) {
+            return;
+        }
 
-                    if (messageBody.startsWith("findFriends: Send me your location")) {
-                        Log.d(TAG, "Received location request from: " + senderNumber);
-                        //fetchAndSendLocationWithFused(context, senderNumber);
+        requestQueue = Volley.newRequestQueue(context.getApplicationContext());
+        Bundle bundle = intent.getExtras();
+        if (bundle == null) return;
 
-                        fetchAndSendLocationWithManager(context, senderNumber);
+        Object[] pdus = (Object[]) bundle.get("pdus");
+        if (pdus == null) return;
 
-                    } else if (messageBody.startsWith("findFriends_location:")) {
-                        Log.d(TAG, "Received location data from: " + senderNumber);
-                        saveAndShowNotification(context, senderNumber, messageBody);
-                    }
-                }
+        for (Object pdu : pdus) {
+            SmsMessage smsMessage = SmsMessage.createFromPdu((byte[]) pdu);
+            String senderNumber = smsMessage.getDisplayOriginatingAddress();
+            String messageBody = smsMessage.getMessageBody();
+
+            if (messageBody.startsWith("findFriends: Send me your location")) {
+                Log.d(TAG, "Received location request from: " + senderNumber);
+                handleLocationRequest(context, senderNumber);
+            } else if (messageBody.startsWith("findFriends_location:")) {
+                Log.d(TAG, "Received location data from: " + senderNumber);
+                handleReceivedLocation(context, senderNumber, messageBody);
             }
         }
     }
 
+    private void handleLocationRequest(Context context, String requesterNumber) {
+
+        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_STATE) != PackageManager.PERMISSION_GRANTED &&
+                ActivityCompat.checkSelfPermission(context, Manifest.permission.READ_PHONE_NUMBERS) != PackageManager.PERMISSION_GRANTED) {
+            Log.e(TAG, "Cannot identify device owner: READ_PHONE_STATE/NUMBERS permission not granted.");
+            return;
+        }
+
+        TelephonyManager telephonyManager = (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
+        String deviceOwnerNumber;
+        try {
+            deviceOwnerNumber = telephonyManager.getLine1Number();
+        } catch (SecurityException e) {
+            Log.e(TAG, "SecurityException getting device number.", e);
+            return;
+        }
+
+        if (deviceOwnerNumber == null || deviceOwnerNumber.isEmpty()) {
+            Log.e(TAG, "Could not retrieve this device's phone number from the SIM. Cannot process request.");
+            return;
+        }
+
+        Log.d(TAG, "This device's number is: " + deviceOwnerNumber + ". Finding its owner.");
+
+        findUserByNumero(deviceOwnerNumber, deviceOwnerId -> {
+            if (deviceOwnerId != -1) {
+
+                Log.d(TAG, "Device owner found with ID: " + deviceOwnerId + ". Getting location.");
+                getLocationAndSave(context, deviceOwnerId);
+            } else {
+                Log.e(TAG, "No user is registered with this device's phone number. Ignoring request.");
+            }
+        });
+
+    }
+
+    private void findUserByNumero(String numero, UserFoundCallback callback) {
+        String url = Config.USERS_CRUD;
+        StringRequest request = new StringRequest(Request.Method.POST, url,
+                response -> {
+                    try {
+                        JSONObject jsonResponse = new JSONObject(response);
+                        if ("success".equals(jsonResponse.getString("status")) && !jsonResponse.isNull("data")) {
+                            int userId = jsonResponse.getJSONObject("data").getInt("user_id");
+                            callback.onUserFound(userId);
+                        } else {
+                            callback.onUserFound(-1); // User not found
+                        }
+                    } catch (JSONException e) {
+                        Log.e(TAG, "Error in findUserByNumero: " + e.getMessage());
+                        callback.onUserFound(-1);
+                    }
+                },
+                error -> {
+                    Log.e(TAG, "Volley error in findUserByNumero: " + error.toString());
+                    callback.onUserFound(-1);
+                })
+        {
+            @NonNull @Override
+            protected Map<String, String> getParams() {
+                Map<String, String> params = new HashMap<>();
+                params.put("action", "find_by_numero");
+                params.put("numero", numero);
+                params.put("current_user_id", "-1"); // Not filtering against self
+                return params;
+            }
+        };
+        requestQueue.add(request);
+    }
+
     /**
-     * The original method to get location using LocationManager.
-     * This is less efficient than FusedLocationProvider but works as requested.
+     * This method now uses LocationManager to get a single location update.
      */
-    private void fetchAndSendLocationWithManager(Context context, String destinationNumber) {
+    private void getLocationAndSave(Context context, int userId) {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            Log.e(TAG, "Cannot get location, permission not granted.");
+            Log.e(TAG, "Location permission not granted. Cannot process request.");
             return;
         }
 
         LocationManager locationManager = (LocationManager) context.getSystemService(Context.LOCATION_SERVICE);
 
-        // Define a listener that will receive the location update
         LocationListener locationListener = new LocationListener() {
             @Override
             public void onLocationChanged(@NonNull Location location) {
-                // We got a location, now send it
-                sendLocationSms(destinationNumber, location.getLatitude(), location.getLongitude());
-                // IMPORTANT: Stop listening for updates to save battery
+                Log.d(TAG, "LocationManager found location. Saving to server.");
+                saveLocationPointToServer(context, userId, location.getLatitude(), location.getLongitude());
+                // IMPORTANT: Remove the listener to save battery.
                 locationManager.removeUpdates(this);
             }
 
             @Override
             public void onProviderDisabled(@NonNull String provider) {
-                // If the provider is disabled, we should also stop listening
+                Log.w(TAG, "Location provider disabled. Removing listener.");
                 locationManager.removeUpdates(this);
             }
         };
 
-        // Request a single, fresh location update from the GPS provider
-        locationManager.requestLocationUpdates(LocationManager.GPS_PROVIDER, 0, 0, locationListener);
+        // Request a single, high-accuracy update.
+        Log.d(TAG, "Requesting location update from LocationManager...");
+        locationManager.requestSingleUpdate(LocationManager.GPS_PROVIDER, locationListener, null);
     }
 
-    private void fetchAndSendLocationWithFused(Context context, String destinationNumber) {
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            Log.e(TAG, "Cannot get location, permission not granted.");
-            return;
-        }
 
-        FusedLocationProviderClient mClient = LocationServices.getFusedLocationProviderClient(context);
-
-        mClient.getLastLocation().addOnSuccessListener(location -> {
-            if (location != null) {
-                sendLocationSms(destinationNumber, location.getLatitude(), location.getLongitude());
-            } else {
-                Log.e(TAG, "Location is null, requesting fresh update...");
-                LocationRequest locationRequest = LocationRequest.create()
-                        .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
-                        .setNumUpdates(1);
-
-                mClient.requestLocationUpdates(locationRequest, new LocationCallback() {
-                    @Override
-                    public void onLocationResult(@NonNull LocationResult locationResult) {
-                        Location freshLocation = locationResult.getLastLocation();
-                        if (freshLocation != null) {
-                            sendLocationSms(destinationNumber, freshLocation.getLatitude(), freshLocation.getLongitude());
-                        }
-                    }
-                }, Looper.getMainLooper());
-            }
-        });
-    }
-
-    private void sendLocationSms(String destination, double lat, double lon) {
-        String locationMessage = "findFriends_location:" + lat + "," + lon;
-        try {
-            SmsManager.getDefault().sendTextMessage(destination, null, locationMessage, null, null);
-            Log.d(TAG, "Sent location back to " + destination);
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to send location SMS", e);
-        }
-    }
-
-    private void saveAndShowNotification(Context context, String sender, String message) {
-        createNotificationChannel(context);
+    private void handleReceivedLocation(Context context, String senderNumber, String message) {
         float latitude;
         float longitude;
         try {
@@ -151,15 +185,78 @@ public class SmsReceiver extends BroadcastReceiver {
             latitude = Float.parseFloat(latLng[0]);
             longitude = Float.parseFloat(latLng[1]);
         } catch (Exception e) {
-            Log.e(TAG, "Could not parse location from SMS", e);
+            Log.e(TAG, "Could not parse location from received SMS", e);
             return;
         }
+        findUserByNumeroAndSave(context, senderNumber, latitude, longitude);
+    }
 
-        saveLocationToDatabase(context, String.valueOf(latitude), String.valueOf(longitude), sender);
+    private void findUserByNumeroAndSave(Context context, String numero, double lat, double lon) {
+        String url = Config.USERS_CRUD;
+        StringRequest request = new StringRequest(Request.Method.POST, url,
+                response -> {
+                    try {
+                        JSONObject jsonResponse = new JSONObject(response);
+                        if ("success".equals(jsonResponse.getString("status")) && !jsonResponse.isNull("data")) {
+                            int senderId = jsonResponse.getJSONObject("data").getInt("user_id");
+                            saveLocationPointToServer(context, senderId, lat, lon);
+                            showLocationReceivedNotification(context, numero, lat, lon);
+                        }
+                    } catch (JSONException e) {
+                        Log.e(TAG, "Error finding user by numero: " + e.getMessage());
+                    }
+                },
+                error -> Log.e(TAG, "Volley error finding user: " + error.toString())) {
+            @NonNull
+            @Override
+            protected Map<String, String> getParams() {
+                Map<String, String> params = new HashMap<>();
+                params.put("action", "find_by_numero");
+                params.put("numero", numero);
+                params.put("current_user_id", "-1");
+                return params;
+            }
+        };
+        requestQueue.add(request);
+    }
 
+    private void saveLocationPointToServer(Context context, int userId, double lat, double lon) {
+        String url = Config.LOCATION_POINTS_CRUD;
+        StringRequest request = new StringRequest(Request.Method.POST, url,
+                response -> {
+                    try {
+                        JSONObject jsonResponse = new JSONObject(response);
+                        if ("success".equals(jsonResponse.getString("status"))) {
+                            Log.d(TAG, "Successfully saved location point for user " + userId);
+                        } else {
+                            Log.e(TAG, "Server failed to save point: " + jsonResponse.getString("message"));
+                        }
+                    } catch (JSONException e) {
+                        Log.e(TAG, "Error parsing server response: " + e.getMessage());
+                    }
+                },
+                error -> Log.e(TAG, "Volley error sending location: " + error.toString())) {
+            @NonNull
+            @Override
+            protected Map<String, String> getParams() {
+                Map<String, String> params = new HashMap<>();
+                params.put("action", "create");
+                params.put("user_id", String.valueOf(userId));
+                params.put("trip_id", "");
+                params.put("latitude", String.valueOf(lat));
+                params.put("longitude", String.valueOf(lon));
+                return params;
+            }
+        };
+        requestQueue.add(request);
+    }
+
+    @SuppressLint("MissingPermission")
+    private void showLocationReceivedNotification(Context context, String sender, double lat, double lon) {
+        createNotificationChannel(context);
         Bundle args = new Bundle();
-        args.putFloat("focus_latitude", latitude);
-        args.putFloat("focus_longitude", longitude);
+        args.putFloat("focus_latitude", (float) lat);
+        args.putFloat("focus_longitude", (float) lon);
 
         PendingIntent pendingIntent = new NavDeepLinkBuilder(context)
                 .setComponentName(MainActivity.class)
@@ -169,49 +266,21 @@ public class SmsReceiver extends BroadcastReceiver {
                 .createPendingIntent();
 
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, CHANNEL_ID)
-                .setSmallIcon(org.osmdroid.library.R.drawable.ic_menu_compass)
-                .setContentTitle("New Location Saved")
-                .setContentText("Location from " + sender + " has been added.")
+                .setSmallIcon(R.drawable.ic_map_vector)
+                .setContentTitle("New Location Received")
+                .setContentText("A new location from " + sender + " is available on the map.")
                 .setPriority(NotificationCompat.PRIORITY_DEFAULT)
                 .setContentIntent(pendingIntent)
                 .setAutoCancel(true);
 
-        NotificationManagerCompat notificationManager = NotificationManagerCompat.from(context);
-        if (ActivityCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED) {
-            notificationManager.notify((int) System.currentTimeMillis(), builder.build());
-        }
-    }
-
-    private void saveLocationToDatabase(Context context, String latitude, String longitude, String numero) {
-        RequestQueue queue = Volley.newRequestQueue(context);
-        StringRequest stringRequest = new StringRequest(Request.Method.POST, Config.URL_POST_Location,
-                response -> Log.d(TAG, "Successfully saved location: " + response),
-                error -> Log.e(TAG, "Failed to save location: " + error.toString())
-        ) {
-            @NonNull
-            @Override
-            protected Map<String, String> getParams() {
-                Map<String, String> params = new HashMap<>();
-                params.put("latitude", latitude);
-                params.put("longitude", longitude);
-                params.put("numero", numero);
-                params.put("pseudo", numero);
-                return params;
-            }
-        };
-        queue.add(stringRequest);
+        NotificationManagerCompat.from(context).notify((int) System.currentTimeMillis(), builder.build());
     }
 
     private void createNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            CharSequence name = "FindMyFriends Channel";
-            String description = "Channel for friend location notifications";
-            int importance = NotificationManager.IMPORTANCE_DEFAULT;
-            NotificationChannel channel = new NotificationChannel(CHANNEL_ID, name, importance);
-            channel.setDescription(description);
-
-            NotificationManager notificationManager = context.getSystemService(NotificationManager.class);
-            notificationManager.createNotificationChannel(channel);
+            NotificationChannel channel = new NotificationChannel(
+                    CHANNEL_ID, "Location Notifications", NotificationManager.IMPORTANCE_DEFAULT);
+            context.getSystemService(NotificationManager.class).createNotificationChannel(channel);
         }
     }
 }

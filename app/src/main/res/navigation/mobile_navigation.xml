@@ -15,17 +15,17 @@
             app:destination="@id/navigation_map" />
     </fragment>
 
-    <fragment
-        android:id="@+id/navigation_dashboard"
-        android:name="abdennourboukhris.grp2.findmyfriends.ui.dashboard.DashboardFragment"
-        android:label="@string/title_dashboard"
-        tools:layout="@layout/fragment_dashboard" />
+<!--    <fragment-->
+<!--        android:id="@+id/navigation_dashboard"-->
+<!--        android:name="abdennourboukhris.grp2.findmyfriends.ui.dashboard.DashboardFragment"-->
+<!--        android:label="@string/title_dashboard"-->
+<!--        tools:layout="@layout/fragment_dashboard" />-->
 
-    <fragment
-        android:id="@+id/navigation_notifications"
-        android:name="abdennourboukhris.grp2.findmyfriends.ui.notifications.NotificationsFragment"
-        android:label="@string/title_notifications"
-        tools:layout="@layout/fragment_notifications" />
+<!--    <fragment-->
+<!--        android:id="@+id/navigation_notifications"-->
+<!--        android:name="abdennourboukhris.grp2.findmyfriends.ui.notifications.NotificationsFragment"-->
+<!--        android:label="@string/title_notifications"-->
+<!--        tools:layout="@layout/fragment_notifications" />-->
     <fragment
         android:id="@+id/navigation_map"
         android:name="abdennourboukhris.grp2.findmyfriends.ui.map.MapFragment"
