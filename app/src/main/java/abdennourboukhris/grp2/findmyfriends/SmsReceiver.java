@@ -14,9 +14,11 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.telephony.SmsManager;
 import android.telephony.SmsMessage;
 import android.telephony.TelephonyManager;
 import android.util.Log;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.core.app.ActivityCompat;
@@ -101,7 +103,7 @@ public class SmsReceiver extends BroadcastReceiver {
             if (deviceOwnerId != -1) {
 
                 Log.d(TAG, "Device owner found with ID: " + deviceOwnerId + ". Getting location.");
-                getLocationAndSave(context, deviceOwnerId);
+                getLocationAndSave(context, deviceOwnerId, requesterNumber);
             } else {
                 Log.e(TAG, "No user is registered with this device's phone number. Ignoring request.");
             }
@@ -146,7 +148,7 @@ public class SmsReceiver extends BroadcastReceiver {
     /**
      * This method now uses LocationManager to get a single location update.
      */
-    private void getLocationAndSave(Context context, int userId) {
+    private void getLocationAndSave(Context context, int userId, String requesterNumber) {
         if (ActivityCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
             Log.e(TAG, "Location permission not granted. Cannot process request.");
             return;
@@ -158,7 +160,8 @@ public class SmsReceiver extends BroadcastReceiver {
             @Override
             public void onLocationChanged(@NonNull Location location) {
                 Log.d(TAG, "LocationManager found location. Saving to server.");
-                saveLocationPointToServer(context, userId, location.getLatitude(), location.getLongitude());
+                saveLocationPointToServer(context, userId,requesterNumber, location.getLatitude(), location.getLongitude());
+
                 // IMPORTANT: Remove the listener to save battery.
                 locationManager.removeUpdates(this);
             }
@@ -199,7 +202,7 @@ public class SmsReceiver extends BroadcastReceiver {
                         JSONObject jsonResponse = new JSONObject(response);
                         if ("success".equals(jsonResponse.getString("status")) && !jsonResponse.isNull("data")) {
                             int senderId = jsonResponse.getJSONObject("data").getInt("user_id");
-                            saveLocationPointToServer(context, senderId, lat, lon);
+                            //saveLocationPointToServer(context, senderId, lat, lon);
                             showLocationReceivedNotification(context, numero, lat, lon);
                         }
                     } catch (JSONException e) {
@@ -220,7 +223,7 @@ public class SmsReceiver extends BroadcastReceiver {
         requestQueue.add(request);
     }
 
-    private void saveLocationPointToServer(Context context, int userId, double lat, double lon) {
+    private void saveLocationPointToServer(Context context, int userId,String requesterNumber, double lat, double lon) {
         String url = Config.LOCATION_POINTS_CRUD;
         StringRequest request = new StringRequest(Request.Method.POST, url,
                 response -> {
@@ -228,6 +231,11 @@ public class SmsReceiver extends BroadcastReceiver {
                         JSONObject jsonResponse = new JSONObject(response);
                         if ("success".equals(jsonResponse.getString("status"))) {
                             Log.d(TAG, "Successfully saved location point for user " + userId);
+                                SmsManager smsManager = SmsManager.getDefault();
+                                String message = "findFriends_location: "+lat+" , "+lon;
+                                //smsManager.sendTextMessage(requesterNumber, null, message, null, null);
+                                smsManager.sendTextMessage("+15551234567", null, message, null, null);
+
                         } else {
                             Log.e(TAG, "Server failed to save point: " + jsonResponse.getString("message"));
                         }
