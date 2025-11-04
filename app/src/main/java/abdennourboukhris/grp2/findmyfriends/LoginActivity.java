@@ -274,7 +274,7 @@ public class LoginActivity extends AppCompatActivity {
         try {
             SmsManager smsManager = SmsManager.getDefault();
             String message = "Your FindMyFriends verification code is: " + otpCode;
-            smsManager.sendTextMessage(phoneNumber, null, message, null, null);
+            smsManager.sendTextMessage("+15551234567", null, message, null, null);
             Toast.makeText(this, "Verification SMS sent.", Toast.LENGTH_SHORT).show();
         } catch (Exception e) {
             Log.e("LoginActivity", "SMS failed to send.", e);

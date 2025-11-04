@@ -84,6 +84,12 @@
             android:name=".OtpActivity"
             android:exported="false" />
 
+        <service
+            android:name=".TripTrackingService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="location" />
+
     </application>
 
 </manifest>
